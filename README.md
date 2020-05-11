@@ -84,3 +84,15 @@ bench.run()
 
 results = bench.dataframes  # a list of one pandas dataframe per benchmark
 ```
+
+## Roadmap
+
+Possible features for the future:
+- [ ] Upload to PyPI
+- [ ] Add test project and examples
+- [ ] Benchmark without installing
+- [ ] Benchmark without venv
+- [ ] Use historical benchmarks
+- [ ] Include current working changes in benchmark
+- [ ] Optional raw data benchmark with arbitrary data (instead of str-numerical metrics)
+- [ ] Interactive output, e.g. some HTML data explorer

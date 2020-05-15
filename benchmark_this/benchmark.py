@@ -190,6 +190,7 @@ class Benchmarker:
                             debug(f"|  {l}")
 
                 install("Repository", str(tmp_folder))
+                # TODO: these have to be dynamic somehow!
                 install("Dependencies", "pupil-detectors", "opencv-python")
 
                 print(f"Collecting benchmark data:")

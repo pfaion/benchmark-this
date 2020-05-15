@@ -88,6 +88,7 @@ results = bench.dataframes  # a list of one pandas dataframe per benchmark
 ## Roadmap
 
 Possible features for the future:
+- [ ] Allow to specify additional benchmark dependencies
 - [ ] Upload to PyPI
 - [ ] Add test project and examples
 - [ ] Benchmark without installing

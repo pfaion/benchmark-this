@@ -53,6 +53,11 @@ def main():
         help="enable to print verbose output",
     )
     parser.add_argument(
+        "--install",
+        action="store_true",
+        help="enable to install the repo in a virtualenv before running the benchmarks",
+    )
+    parser.add_argument(
         "benchmarks",
         nargs="*",
         action="store",
@@ -76,6 +81,7 @@ def main():
         verbosity=args.verbose,
         clear_cache=args.clear_cache,
         benchmarks=args.benchmarks or None,
+        install=args.install,
     )
 
     if args.print:

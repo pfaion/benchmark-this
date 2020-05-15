@@ -1,11 +1,12 @@
 import os
 import pickle
+import shutil
 import subprocess
 import sys
 from os import PathLike
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import List, Dict
+from typing import Dict, List
 
 import pandas as pd
 import virtualenv
@@ -94,7 +95,7 @@ class Benchmarker:
             dfs[benchmark] = df
         return dfs
 
-    def run(self, verbosity=0, clear_cache=False, benchmarks=None):
+    def run(self, verbosity=0, clear_cache=False, benchmarks=None, install=False):
         def debug(*args, **kwargs):
             if verbosity > 0:
                 print(*args, **kwargs)
@@ -160,64 +161,95 @@ class Benchmarker:
                     "add", "--detach", str(tmp_folder), commit.hexsha
                 )
 
-                debug(f"Creating virtual environment for benchmarking")
-                venv_dir = tmp_folder / ".venv"
-                virtualenv.cli_run([str(venv_dir)])
+                if install:
 
-                activate_file = str(venv_dir / "bin" / "activate")
+                    debug(f"Creating virtual environment for benchmarking")
+                    venv_dir = tmp_folder / ".venv"
+                    virtualenv.cli_run([str(venv_dir)])
 
-                def install(name, *libs):
-                    debug(f"Installing {name}...", end="")
-                    # NOTE: we want to run pip of the venv, so we need to make sure that the
-                    # environment for the venv is loaded before. This can only reliably happen
-                    # with the activiation script. Note that the 'source' command is not
-                    # available in 'sh', but only in 'bash', so we need to select this shell
-                    # explicitly!
-                    proc = subprocess.run(
-                        f"source {activate_file} && python -m pip install -U {' '.join(libs)}",
-                        shell=True,
-                        executable="bash",  # for 'source' to work
-                        capture_output=True,
-                        encoding="utf-8",
-                    )
-                    if proc.stderr:
-                        print(f"Error installing {name}:")
-                        for l in proc.stderr.splitlines():
-                            print(f"|  {l}")
-                    else:
-                        debug(f"DONE!")
-                        for l in proc.stdout.splitlines():
-                            debug(f"|  {l}")
+                    activate_file = str(venv_dir / "bin" / "activate")
 
-                install("Repository", str(tmp_folder))
-                # TODO: these have to be dynamic somehow!
-                install("Dependencies", "pupil-detectors", "opencv-python")
+                    def install(name, *libs):
+                        debug(f"Installing {name}...", end="")
+                        # NOTE: we want to run pip of the venv, so we need to make sure that the
+                        # environment for the venv is loaded before. This can only reliably happen
+                        # with the activiation script. Note that the 'source' command is not
+                        # available in 'sh', but only in 'bash', so we need to select this shell
+                        # explicitly!
+                        proc = subprocess.run(
+                            f"source {activate_file} && python -m pip install -U {' '.join(libs)}",
+                            shell=True,
+                            executable="bash",  # for 'source' to work
+                            capture_output=True,
+                            encoding="utf-8",
+                        )
+                        if proc.stderr:
+                            print(f"Error installing {name}:")
+                            for l in proc.stderr.splitlines():
+                                print(f"|  {l}")
+                        else:
+                            debug(f"DONE!")
+                            for l in proc.stdout.splitlines():
+                                debug(f"|  {l}")
 
-                print(f"Collecting benchmark data:")
-                for benchmark in benchmarks:
-                    path = self.benchmark_dir / f"{benchmark}.py"
-                    print(f"Running benchmark '{benchmark}'...")
-                    # NOTE: Running this as non-shell allows to hook the Python debugger into this!
-                    # While we want to run this in the venv, this does not work properly when
-                    # starting a non-shell subprocess. Instead, 'collector.py' activates the
-                    # environment itself internally. For this to work properly, we can NOT use the
-                    # venv python binary to run collector.py!
-                    with subprocess.Popen(
-                        [
-                            sys.executable,
-                            "-u",  # unbuffered stdout/stderr for realtime benchmark output
-                            str(Path(collector.__file__).resolve()),
-                            str(venv_dir),
-                            str(path),
-                            commit.hexsha,
-                        ],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        encoding="utf-8",
-                        cwd=str(self.benchmark_dir),
-                    ) as process:
-                        for line in iter(process.stdout.readline, ""):
-                            print(f"|  {line}", end="")
+                    install("Repository", str(tmp_folder))
+                    # TODO: these have to be dynamic somehow!
+                    install("Dependencies", "pupil-detectors", "opencv-python")
+
+                    print(f"Collecting benchmark data:")
+                    for benchmark in benchmarks:
+                        path = self.benchmark_dir / f"{benchmark}.py"
+                        print(f"Running benchmark '{benchmark}'...")
+                        # NOTE: Running this as non-shell allows to hook the Python debugger into this!
+                        # While we want to run this in the venv, this does not work properly when
+                        # starting a non-shell subprocess. Instead, 'collector.py' activates the
+                        # environment itself internally. For this to work properly, we can NOT use the
+                        # venv python binary to run collector.py!
+                        with subprocess.Popen(
+                            [
+                                sys.executable,
+                                "-u",  # unbuffered stdout/stderr for realtime benchmark output
+                                str(Path(collector.__file__).resolve()),
+                                str(path),
+                                commit.hexsha,
+                                str(self.data_dir),
+                                str(venv_dir),
+                            ],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            encoding="utf-8",
+                            cwd=str(self.benchmark_dir),
+                        ) as process:
+                            for line in iter(process.stdout.readline, ""):
+                                print(f"|  {line}", end="")
+                else:
+                    debug(f"Replacing benchmark folder in snapshot")
+
+                    snapshot_benchmark_folder = tmp_folder / "benchmarks"
+                    if snapshot_benchmark_folder.exists():
+                        shutil.rmtree(snapshot_benchmark_folder, ignore_errors=True)
+                    shutil.copytree(self.benchmark_dir, snapshot_benchmark_folder)
+
+                    print(f"Collecting benchmark data:")
+                    for benchmark in benchmarks:
+                        path = snapshot_benchmark_folder / f"{benchmark}.py"
+                        print(f"Running benchmark '{benchmark}'...")
+                        with subprocess.Popen(
+                            [
+                                sys.executable,
+                                "-u",  # unbuffered stdout/stderr for realtime benchmark output
+                                str(Path(collector.__file__).resolve()),
+                                str(path),
+                                commit.hexsha,
+                                str(self.data_dir),
+                            ],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            encoding="utf-8",
+                            cwd=str(snapshot_benchmark_folder),
+                        ) as process:
+                            for line in iter(process.stdout.readline, ""):
+                                print(f"|  {line}", end="")
 
                 # create dummy dump if benchmark failed in order to not re-run this every time!
                 for cache in caches.values():

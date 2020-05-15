@@ -5,20 +5,20 @@ from importlib import import_module
 from pathlib import Path
 
 
-def collect(venv_dir: str, benchmark_path: str, commit: str):
+def collect(benchmark_path: str, commit: str, cache_dir: str, venv_dir: str = None):
     benchmark = Path(benchmark_path).resolve()
     if not benchmark.is_file or benchmark.suffix != ".py":
         raise RuntimeError(f"Benchmark '{benchmark_path}' is not a valid Python file!")
 
-    print(f"Activating venv for collection...")
-    activation_script = str(Path(venv_dir).resolve() / "bin" / "activate_this.py")
+    if venv_dir is not None:
+        print(f"Activating venv for collection...")
+        activation_script = str(Path(venv_dir).resolve() / "bin" / "activate_this.py")
 
-    exec(open(activation_script).read(), {"__file__": activation_script})
+        exec(open(activation_script).read(), {"__file__": activation_script})
 
     print(f"Collecting benchmarks for commit '{commit}'...")
 
     root_dir = benchmark.parent
-    data_dir = root_dir / "__data_collector"
 
     try:
         print(f"Running benchmark: {benchmark.stem} ...")
@@ -34,8 +34,9 @@ def collect(venv_dir: str, benchmark_path: str, commit: str):
 
     else:
         print(f"Results: {results}")
-        print(f"Storing benchmark data...")
-        storage = root_dir / "__benchmark_data__" / f"{commit}_{benchmark.stem}.pickle"
+        cache = Path(cache_dir).resolve()
+        print(f"Storing benchmark data in {cache}...")
+        storage = cache / f"{commit}_{benchmark.stem}.pickle"
         if storage.exists():
             raise RuntimeError(f"Benchmark storage already existing! {storage}")
         storage.parent.mkdir(parents=True, exist_ok=True)
